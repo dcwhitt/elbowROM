@@ -275,37 +275,8 @@
       margin-top: 0;
     }
 
-    .segmented-control {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin: 8px 0 12px;
-    }
-
-    .segmented-control button {
-      background: #e8ebf4;
-      color: var(--navy);
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 11px 10px;
-    }
-
-    .segmented-control button.active {
-      background: var(--navy);
-      color: white;
-      border-color: var(--navy);
-    }
-
-    .input-method-section {
+    .hidden-file-input {
       display: none;
-      animation: fadeIn 0.15s ease;
-    }
-
-    .input-method-section.active {
-      display: block;
     }
 
     .icon-button {
@@ -475,10 +446,6 @@
       .setup-grid {
         grid-template-columns: 1fr;
       }
-
-      .segmented-control {
-        grid-template-columns: 1fr;
-      }
     }
   </style>
 </head>
@@ -559,30 +526,25 @@
         <h2>Flexion Image</h2>
 
         <div class="input-method-card">
-          <h3>Choose Image Source</h3>
-          <div class="segmented-control">
-            <button id="flexionMobileToggle" class="active" type="button"><span class="icon">📱</span> Phone / Upload</button>
-            <button id="flexionDesktopToggle" type="button"><span class="icon">💻</span> Desktop Camera</button>
+          <h3>Image Source</h3>
+          <p class="small">
+            Use Capture Photo for a live camera preview when available. If the browser blocks live camera,
+            the app will fall back to your device camera/photo picker.
+          </p>
+
+          <input id="flexionCamera" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
+          <input id="flexionUpload" class="hidden-file-input" type="file" accept="image/*" />
+
+          <div class="button-row">
+            <button id="openFlexionCameraBtn" class="icon-button" type="button"><span class="icon">📸</span> Capture Photo</button>
+            <button id="triggerFlexionUploadBtn" class="secondary icon-button" type="button"><span class="icon">⬆</span> Upload Photo</button>
           </div>
 
-          <div id="flexionMobileSection" class="input-method-section active">
-            <label for="flexionCamera">Take Flexion Photo on Phone</label>
-            <input id="flexionCamera" type="file" accept="image/*" capture="environment" />
-
-            <label for="flexionUpload">Upload Existing Flexion Photo</label>
-            <input id="flexionUpload" type="file" accept="image/*" />
-          </div>
-
-          <div id="flexionDesktopSection" class="input-method-section">
-            <p class="small">Use this on a laptop/desktop browser with a webcam. The deployed site must be HTTPS.</p>
+          <div id="flexionCameraBox" class="camera-box">
+            <video id="flexionVideo" autoplay playsinline muted></video>
             <div class="button-row">
-              <button id="openFlexionCameraBtn" class="icon-button" type="button"><span class="icon">🎥</span> Open Camera</button>
-              <button id="captureFlexionBtn" class="secondary icon-button" type="button"><span class="icon">📸</span> Capture Flexion</button>
-              <button id="closeFlexionCameraBtn" class="danger icon-button" type="button"><span class="icon">✕</span> Close</button>
-            </div>
-
-            <div id="flexionCameraBox" class="camera-box">
-              <video id="flexionVideo" autoplay playsinline muted></video>
+              <button id="captureFlexionBtn" class="green icon-button" type="button"><span class="icon">✓</span> Use This Photo</button>
+              <button id="closeFlexionCameraBtn" class="danger icon-button" type="button"><span class="icon">✕</span> Cancel Camera</button>
             </div>
           </div>
         </div>
@@ -621,30 +583,25 @@
         <h2>Extension Image</h2>
 
         <div class="input-method-card">
-          <h3>Choose Image Source</h3>
-          <div class="segmented-control">
-            <button id="extensionMobileToggle" class="active" type="button"><span class="icon">📱</span> Phone / Upload</button>
-            <button id="extensionDesktopToggle" type="button"><span class="icon">💻</span> Desktop Camera</button>
+          <h3>Image Source</h3>
+          <p class="small">
+            Use Capture Photo for a live camera preview when available. If the browser blocks live camera,
+            the app will fall back to your device camera/photo picker.
+          </p>
+
+          <input id="extensionCamera" class="hidden-file-input" type="file" accept="image/*" capture="environment" />
+          <input id="extensionUpload" class="hidden-file-input" type="file" accept="image/*" />
+
+          <div class="button-row">
+            <button id="openExtensionCameraBtn" class="icon-button" type="button"><span class="icon">📸</span> Capture Photo</button>
+            <button id="triggerExtensionUploadBtn" class="secondary icon-button" type="button"><span class="icon">⬆</span> Upload Photo</button>
           </div>
 
-          <div id="extensionMobileSection" class="input-method-section active">
-            <label for="extensionCamera">Take Extension Photo on Phone</label>
-            <input id="extensionCamera" type="file" accept="image/*" capture="environment" />
-
-            <label for="extensionUpload">Upload Existing Extension Photo</label>
-            <input id="extensionUpload" type="file" accept="image/*" />
-          </div>
-
-          <div id="extensionDesktopSection" class="input-method-section">
-            <p class="small">Use this on a laptop/desktop browser with a webcam. The deployed site must be HTTPS.</p>
+          <div id="extensionCameraBox" class="camera-box">
+            <video id="extensionVideo" autoplay playsinline muted></video>
             <div class="button-row">
-              <button id="openExtensionCameraBtn" class="icon-button" type="button"><span class="icon">🎥</span> Open Camera</button>
-              <button id="captureExtensionBtn" class="secondary icon-button" type="button"><span class="icon">📸</span> Capture Extension</button>
-              <button id="closeExtensionCameraBtn" class="danger icon-button" type="button"><span class="icon">✕</span> Close</button>
-            </div>
-
-            <div id="extensionCameraBox" class="camera-box">
-              <video id="extensionVideo" autoplay playsinline muted></video>
+              <button id="captureExtensionBtn" class="green icon-button" type="button"><span class="icon">✓</span> Use This Photo</button>
+              <button id="closeExtensionCameraBtn" class="danger icon-button" type="button"><span class="icon">✕</span> Cancel Camera</button>
             </div>
           </div>
         </div>
@@ -726,7 +683,7 @@
     import {
       PoseLandmarker,
       FilesetResolver
-    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35";
 
     const landmarkSequence = [
       {
@@ -773,12 +730,9 @@
       openFlexionCameraBtn: document.getElementById("openFlexionCameraBtn"),
       captureFlexionBtn: document.getElementById("captureFlexionBtn"),
       closeFlexionCameraBtn: document.getElementById("closeFlexionCameraBtn"),
+      triggerFlexionUploadBtn: document.getElementById("triggerFlexionUploadBtn"),
       flexionCameraBox: document.getElementById("flexionCameraBox"),
       flexionVideo: document.getElementById("flexionVideo"),
-      flexionMobileToggle: document.getElementById("flexionMobileToggle"),
-      flexionDesktopToggle: document.getElementById("flexionDesktopToggle"),
-      flexionMobileSection: document.getElementById("flexionMobileSection"),
-      flexionDesktopSection: document.getElementById("flexionDesktopSection"),
 
       extensionCamera: document.getElementById("extensionCamera"),
       extensionUpload: document.getElementById("extensionUpload"),
@@ -796,12 +750,9 @@
       openExtensionCameraBtn: document.getElementById("openExtensionCameraBtn"),
       captureExtensionBtn: document.getElementById("captureExtensionBtn"),
       closeExtensionCameraBtn: document.getElementById("closeExtensionCameraBtn"),
+      triggerExtensionUploadBtn: document.getElementById("triggerExtensionUploadBtn"),
       extensionCameraBox: document.getElementById("extensionCameraBox"),
       extensionVideo: document.getElementById("extensionVideo"),
-      extensionMobileToggle: document.getElementById("extensionMobileToggle"),
-      extensionDesktopToggle: document.getElementById("extensionDesktopToggle"),
-      extensionMobileSection: document.getElementById("extensionMobileSection"),
-      extensionDesktopSection: document.getElementById("extensionDesktopSection"),
 
       summaryBody: document.getElementById("summaryBody"),
       downloadCsvBtn: document.getElementById("downloadCsvBtn"),
@@ -850,26 +801,6 @@
 
     function capitalize(value) {
       return value.charAt(0).toUpperCase() + value.slice(1);
-    }
-
-    function setInputMethod(kind, method) {
-      const mobileToggle = kind === "flexion" ? elements.flexionMobileToggle : elements.extensionMobileToggle;
-      const desktopToggle = kind === "flexion" ? elements.flexionDesktopToggle : elements.extensionDesktopToggle;
-      const mobileSection = kind === "flexion" ? elements.flexionMobileSection : elements.extensionMobileSection;
-      const desktopSection = kind === "flexion" ? elements.flexionDesktopSection : elements.extensionDesktopSection;
-
-      if (method === "mobile") {
-        mobileToggle.classList.add("active");
-        desktopToggle.classList.remove("active");
-        mobileSection.classList.add("active");
-        desktopSection.classList.remove("active");
-        closeCamera(kind);
-      } else {
-        desktopToggle.classList.add("active");
-        mobileToggle.classList.remove("active");
-        desktopSection.classList.add("active");
-        mobileSection.classList.remove("active");
-      }
     }
 
     function getCanvasForKind(kind) {
@@ -1012,7 +943,9 @@
       const cameraBox = kind === "flexion" ? elements.flexionCameraBox : elements.extensionCameraBox;
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus(status, "Browser camera API is not available. Use phone capture or upload instead.", "warn");
+        const fallbackInput = kind === "flexion" ? elements.flexionCamera : elements.extensionCamera;
+        setStatus(status, "Live camera is not available. Opening device camera/photo picker instead.", "warn");
+        fallbackInput.click();
         return;
       }
 
@@ -1039,7 +972,9 @@
         setStatus(status, "Camera open. Position the elbow, then click Capture " + capitalize(kind) + ".", "good");
       } catch (error) {
         console.error("Camera error:", error);
-        setStatus(status, "Could not open camera. Check browser permission or use upload instead.", "warn");
+        const fallbackInput = kind === "flexion" ? elements.flexionCamera : elements.extensionCamera;
+        setStatus(status, "Could not open live camera. Opening device camera/photo picker instead.", "warn");
+        fallbackInput.click();
       }
     }
 
@@ -1431,7 +1366,7 @@
 
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm"
         );
 
         poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
@@ -1440,7 +1375,10 @@
             delegate: "GPU"
           },
           runningMode: "IMAGE",
-          numPoses: 1
+          numPoses: 1,
+          minPoseDetectionConfidence: 0.3,
+          minPosePresenceConfidence: 0.3,
+          minTrackingConfidence: 0.3
         });
 
         setStatus(statusElement, "Pose model loaded.", "good");
@@ -1450,7 +1388,7 @@
 
         try {
           const vision = await FilesetResolver.forVisionTasks(
-            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm"
           );
 
           poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
@@ -1532,6 +1470,8 @@
 
         const result = model.detect(canvas);
         console.log("Pose detection result for " + kind + ":", result);
+        console.log("Canvas size:", canvas.width, canvas.height);
+        console.log("Selected side:", elements.side.value);
 
         if (!result.landmarks || result.landmarks.length === 0) {
           setStatus(
@@ -1565,7 +1505,7 @@
         console.error("Pose detection error for " + kind + ":", error);
         setStatus(
           status,
-          "Pose detection failed. Check the browser console for the exact error. You can still use manual points.",
+          "Pose detection failed. Open the browser console for the exact error. The app still works with manual points.",
           "warn"
         );
       }
@@ -1621,7 +1561,7 @@
       return {
         ...baseMetadata(),
         app_name: "Elbow ROM Tracker",
-        app_version: "0.2.1-manual-drag-mediapipe-canvas-debug",
+        app_version: "0.2.2-clean-capture-upload-mediapipe-debug",
         flexion: imageLabelRecord("flexion"),
         extension: imageLabelRecord("extension"),
         summary: {
@@ -1793,24 +1733,13 @@
     wireCanvasPointerEvents("flexion");
     wireCanvasPointerEvents("extension");
 
-    elements.flexionMobileToggle.addEventListener("click", function () {
-      setInputMethod("flexion", "mobile");
-    });
-
-    elements.flexionDesktopToggle.addEventListener("click", function () {
-      setInputMethod("flexion", "desktop");
-    });
-
-    elements.extensionMobileToggle.addEventListener("click", function () {
-      setInputMethod("extension", "mobile");
-    });
-
-    elements.extensionDesktopToggle.addEventListener("click", function () {
-      setInputMethod("extension", "desktop");
-    });
 
     elements.openFlexionCameraBtn.addEventListener("click", function () {
       openCamera("flexion");
+    });
+
+    elements.triggerFlexionUploadBtn.addEventListener("click", function () {
+      elements.flexionUpload.click();
     });
 
     elements.captureFlexionBtn.addEventListener("click", function () {
@@ -1823,6 +1752,10 @@
 
     elements.openExtensionCameraBtn.addEventListener("click", function () {
       openCamera("extension");
+    });
+
+    elements.triggerExtensionUploadBtn.addEventListener("click", function () {
+      elements.extensionUpload.click();
     });
 
     elements.captureExtensionBtn.addEventListener("click", function () {
