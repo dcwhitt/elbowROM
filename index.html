@@ -207,6 +207,14 @@
       background: #126b32;
     }
 
+    button.purple {
+      background: var(--purple);
+    }
+
+    button.purple:hover {
+      background: #5521ad;
+    }
+
     .button-row {
       display: flex;
       flex-wrap: wrap;
@@ -255,6 +263,23 @@
       color: var(--muted);
     }
 
+    .camera-box {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin: 12px 0;
+      background: var(--light);
+      display: none;
+    }
+
+    .camera-box video {
+      width: 100%;
+      max-height: 360px;
+      border-radius: 10px;
+      background: #111;
+      display: block;
+    }
+
     .canvas-wrap {
       width: 100%;
       min-height: 560px;
@@ -280,6 +305,7 @@
       display: block;
       cursor: crosshair;
       background: white;
+      touch-action: none;
     }
 
     .empty-state {
@@ -395,15 +421,15 @@
 <body>
   <header>
     <h1>Elbow ROM Tracker</h1>
-    <p>Measure elbow flexion, extension deficit, and arc of motion from lateral photos</p>
+    <p>Measure elbow flexion, extension, extension deficit, and arc of motion from lateral photos</p>
   </header>
 
   <main>
     <section class="hero">
-      <h2>Point-click elbow range of motion measurement</h2>
+      <h2>Point-click and ML-assisted elbow range of motion measurement</h2>
       <p>
-        Take a new photo using your device camera or upload an existing image.
-        Click three landmarks on a lateral elbow photo to calculate flexion and extension.
+        Take a new photo using your device camera, use live desktop camera capture, or upload an existing image.
+        You can manually click landmarks, drag points to adjust, or use pose detection to suggest landmarks.
       </p>
     </section>
 
@@ -426,6 +452,7 @@
             <li>Click a proximal humerus / upper-arm point.</li>
             <li>Click the elbow center.</li>
             <li>Click a distal forearm / wrist point.</li>
+            <li>Drag any point to fine-tune the measurement.</li>
             <li>The app calculates the angle at the elbow.</li>
           </ol>
         </div>
@@ -433,7 +460,7 @@
     </section>
 
     <div class="notice">
-      <strong>Dataset-first design:</strong> Every finished measurement can export JSON landmark labels for future automation with pose estimation or a custom keypoint model.
+      <strong>Pose detection:</strong> Auto-detect uses shoulder, elbow, and wrist landmarks when the full arm is visible. If detection is imperfect, drag the points into the correct locations before exporting.
     </div>
 
     <section class="setup-grid">
@@ -466,11 +493,22 @@
       <section class="panel">
         <h2>Flexion Image</h2>
 
-        <label for="flexionCamera">Take Flexion Photo</label>
+        <label for="flexionCamera">Take Flexion Photo on Phone</label>
         <input id="flexionCamera" type="file" accept="image/*" capture="environment" />
 
         <label for="flexionUpload">Upload Existing Flexion Photo</label>
         <input id="flexionUpload" type="file" accept="image/*" />
+
+        <h3>Desktop / Browser Camera</h3>
+        <div class="button-row">
+          <button id="openFlexionCameraBtn" type="button">Open Camera</button>
+          <button id="captureFlexionBtn" class="secondary" type="button">Capture Flexion</button>
+          <button id="closeFlexionCameraBtn" class="danger" type="button">Close Camera</button>
+        </div>
+
+        <div id="flexionCameraBox" class="camera-box">
+          <video id="flexionVideo" autoplay playsinline muted></video>
+        </div>
 
         <div class="mode-box">
           <h3>Current Step</h3>
@@ -480,6 +518,7 @@
 
         <div class="button-row">
           <button id="startFlexionBtn" type="button">Start Flexion Points</button>
+          <button id="autoFlexionBtn" class="purple" type="button">Auto-detect Flexion</button>
           <button id="undoFlexionBtn" class="secondary" type="button">Undo Point</button>
           <button id="clearFlexionBtn" class="danger" type="button">Clear Flexion</button>
         </div>
@@ -504,11 +543,22 @@
       <section class="panel">
         <h2>Extension Image</h2>
 
-        <label for="extensionCamera">Take Extension Photo</label>
+        <label for="extensionCamera">Take Extension Photo on Phone</label>
         <input id="extensionCamera" type="file" accept="image/*" capture="environment" />
 
         <label for="extensionUpload">Upload Existing Extension Photo</label>
         <input id="extensionUpload" type="file" accept="image/*" />
+
+        <h3>Desktop / Browser Camera</h3>
+        <div class="button-row">
+          <button id="openExtensionCameraBtn" type="button">Open Camera</button>
+          <button id="captureExtensionBtn" class="secondary" type="button">Capture Extension</button>
+          <button id="closeExtensionCameraBtn" class="danger" type="button">Close Camera</button>
+        </div>
+
+        <div id="extensionCameraBox" class="camera-box">
+          <video id="extensionVideo" autoplay playsinline muted></video>
+        </div>
 
         <div class="mode-box">
           <h3>Current Step</h3>
@@ -518,13 +568,14 @@
 
         <div class="button-row">
           <button id="startExtensionBtn" type="button">Start Extension Points</button>
+          <button id="autoExtensionBtn" class="purple" type="button">Auto-detect Extension</button>
           <button id="undoExtensionBtn" class="secondary" type="button">Undo Point</button>
           <button id="clearExtensionBtn" class="danger" type="button">Clear Extension</button>
         </div>
 
         <div id="extensionStatus" class="status">No extension image loaded.</div>
 
-        <p class="angle-big" id="extensionAngleDisplay">Extension Deficit: —</p>
+        <p class="angle-big" id="extensionAngleDisplay">Extension: —</p>
 
         <div class="canvas-wrap">
           <canvas id="extensionCanvas"></canvas>
@@ -582,7 +633,12 @@
     This tool is for research, education, and measurement support only. It does not constitute medical advice and does not create a physician-patient relationship.
   </footer>
 
-  <script>
+  <script type="module">
+    import {
+      PoseLandmarker,
+      FilesetResolver
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
     const landmarkSequence = [
       {
         key: "humerus_proximal",
@@ -621,9 +677,15 @@
       flexionStatus: document.getElementById("flexionStatus"),
       flexionAngleDisplay: document.getElementById("flexionAngleDisplay"),
       startFlexionBtn: document.getElementById("startFlexionBtn"),
+      autoFlexionBtn: document.getElementById("autoFlexionBtn"),
       undoFlexionBtn: document.getElementById("undoFlexionBtn"),
       clearFlexionBtn: document.getElementById("clearFlexionBtn"),
       downloadFlexionImageBtn: document.getElementById("downloadFlexionImageBtn"),
+      openFlexionCameraBtn: document.getElementById("openFlexionCameraBtn"),
+      captureFlexionBtn: document.getElementById("captureFlexionBtn"),
+      closeFlexionCameraBtn: document.getElementById("closeFlexionCameraBtn"),
+      flexionCameraBox: document.getElementById("flexionCameraBox"),
+      flexionVideo: document.getElementById("flexionVideo"),
 
       extensionCamera: document.getElementById("extensionCamera"),
       extensionUpload: document.getElementById("extensionUpload"),
@@ -634,15 +696,24 @@
       extensionStatus: document.getElementById("extensionStatus"),
       extensionAngleDisplay: document.getElementById("extensionAngleDisplay"),
       startExtensionBtn: document.getElementById("startExtensionBtn"),
+      autoExtensionBtn: document.getElementById("autoExtensionBtn"),
       undoExtensionBtn: document.getElementById("undoExtensionBtn"),
       clearExtensionBtn: document.getElementById("clearExtensionBtn"),
       downloadExtensionImageBtn: document.getElementById("downloadExtensionImageBtn"),
+      openExtensionCameraBtn: document.getElementById("openExtensionCameraBtn"),
+      captureExtensionBtn: document.getElementById("captureExtensionBtn"),
+      closeExtensionCameraBtn: document.getElementById("closeExtensionCameraBtn"),
+      extensionCameraBox: document.getElementById("extensionCameraBox"),
+      extensionVideo: document.getElementById("extensionVideo"),
 
       summaryBody: document.getElementById("summaryBody"),
       downloadCsvBtn: document.getElementById("downloadCsvBtn"),
       downloadJsonBtn: document.getElementById("downloadJsonBtn"),
       downloadFullJsonBtn: document.getElementById("downloadFullJsonBtn")
     };
+
+    let poseLandmarker = null;
+    let poseModelLoading = false;
 
     elements.date.valueAsDate = new Date();
 
@@ -655,7 +726,11 @@
         source: "",
         mode: "idle",
         points: [],
-        angleDeg: null
+        angleDeg: null,
+        draggingPointIndex: null,
+        wasDragged: false,
+        stream: null,
+        labelSource: "manual_click"
       };
     }
 
@@ -676,7 +751,23 @@
         .replace(/[^a-zA-Z0-9_-]/g, "_");
     }
 
-    function getCanvasClickPoint(event, canvas) {
+    function capitalize(value) {
+      return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function getCanvasForKind(kind) {
+      return kind === "flexion" ? elements.flexionCanvas : elements.extensionCanvas;
+    }
+
+    function getStatusForKind(kind) {
+      return kind === "flexion" ? elements.flexionStatus : elements.extensionStatus;
+    }
+
+    function getAngleDisplayForKind(kind) {
+      return kind === "flexion" ? elements.flexionAngleDisplay : elements.extensionAngleDisplay;
+    }
+
+    function getCanvasPoint(event, canvas) {
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
@@ -685,6 +776,25 @@
         x: (event.clientX - rect.left) * scaleX,
         y: (event.clientY - rect.top) * scaleY
       };
+    }
+
+    function distancePixels(a, b) {
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function findNearbyPoint(kind, point) {
+      const state = app[kind];
+      const threshold = 22;
+
+      for (let i = state.points.length - 1; i >= 0; i--) {
+        if (distancePixels(state.points[i], point) <= threshold) {
+          return i;
+        }
+      }
+
+      return null;
     }
 
     function loadImage(file, source, state, canvas, emptyElement, redrawFn, loadedCallback) {
@@ -708,6 +818,7 @@
           state.points = [];
           state.angleDeg = null;
           state.mode = "idle";
+          state.labelSource = "manual_click";
 
           emptyElement.style.display = "none";
           redrawFn();
@@ -719,6 +830,113 @@
       };
 
       reader.readAsDataURL(file);
+    }
+
+    function loadCanvasImageFromVideo(kind) {
+      const state = app[kind];
+      const video = kind === "flexion" ? elements.flexionVideo : elements.extensionVideo;
+      const canvas = getCanvasForKind(kind);
+      const emptyElement = kind === "flexion" ? elements.flexionEmpty : elements.extensionEmpty;
+      const status = getStatusForKind(kind);
+
+      if (!video.videoWidth || !video.videoHeight) {
+        setStatus(status, "Camera is not ready yet. Try again in a moment.", "warn");
+        return;
+      }
+
+      const captureCanvas = document.createElement("canvas");
+      captureCanvas.width = video.videoWidth;
+      captureCanvas.height = video.videoHeight;
+      const captureCtx = captureCanvas.getContext("2d");
+      captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+      const dataUrl = captureCanvas.toDataURL("image/png");
+      state.img = new Image();
+
+      state.img.onload = function () {
+        const maxWidth = 1200;
+        const scale = state.img.width > maxWidth ? maxWidth / state.img.width : 1;
+
+        canvas.width = Math.round(state.img.width * scale);
+        canvas.height = Math.round(state.img.height * scale);
+
+        state.loaded = true;
+        state.filename = kind + "_desktop_camera_capture.png";
+        state.source = "desktop_camera";
+        state.points = [];
+        state.angleDeg = null;
+        state.mode = "idle";
+        state.labelSource = "manual_click";
+
+        emptyElement.style.display = "none";
+
+        if (kind === "flexion") {
+          elements.flexionModeText.textContent = "Ready";
+          elements.flexionInstructionText.textContent = "Click Start Flexion Points or Auto-detect Flexion.";
+          elements.flexionAngleDisplay.textContent = "Flexion: —";
+        } else {
+          elements.extensionModeText.textContent = "Ready";
+          elements.extensionInstructionText.textContent = "Click Start Extension Points or Auto-detect Extension.";
+          elements.extensionAngleDisplay.textContent = "Extension: —";
+        }
+
+        redraw(kind);
+        updateSummary();
+        setStatus(status, capitalize(kind) + " image captured from desktop camera.", "good");
+      };
+
+      state.img.src = dataUrl;
+    }
+
+    async function openCamera(kind) {
+      const state = app[kind];
+      const status = getStatusForKind(kind);
+      const video = kind === "flexion" ? elements.flexionVideo : elements.extensionVideo;
+      const cameraBox = kind === "flexion" ? elements.flexionCameraBox : elements.extensionCameraBox;
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus(status, "Browser camera API is not available. Use phone capture or upload instead.", "warn");
+        return;
+      }
+
+      try {
+        closeCamera(kind);
+
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
+
+        state.stream = stream;
+        video.srcObject = stream;
+        cameraBox.style.display = "block";
+
+        setStatus(status, "Camera open. Position the elbow, then click Capture " + capitalize(kind) + ".", "good");
+      } catch (error) {
+        setStatus(status, "Could not open camera. Check browser permission or use upload instead.", "warn");
+      }
+    }
+
+    function closeCamera(kind) {
+      const state = app[kind];
+      const video = kind === "flexion" ? elements.flexionVideo : elements.extensionVideo;
+      const cameraBox = kind === "flexion" ? elements.flexionCameraBox : elements.extensionCameraBox;
+
+      if (state.stream) {
+        state.stream.getTracks().forEach(track => track.stop());
+        state.stream = null;
+      }
+
+      video.srcObject = null;
+      cameraBox.style.display = "none";
     }
 
     function angleAtVertexDegrees(a, vertex, c) {
@@ -739,7 +957,7 @@
 
     function drawPoint(ctx, point, label, color) {
       ctx.beginPath();
-      ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
 
@@ -803,7 +1021,7 @@
 
     function redraw(kind) {
       const state = app[kind];
-      const canvas = kind === "flexion" ? elements.flexionCanvas : elements.extensionCanvas;
+      const canvas = getCanvasForKind(kind);
       const ctx = canvas.getContext("2d");
 
       if (!state.loaded) return;
@@ -836,12 +1054,24 @@
       }
     }
 
+    function updateAngleDisplay(kind) {
+      const state = app[kind];
+
+      if (kind === "flexion") {
+        elements.flexionAngleDisplay.textContent =
+          state.angleDeg === null ? "Flexion: —" : "Flexion: " + formatNumber(state.angleDeg, 1) + "°";
+      } else {
+        elements.extensionAngleDisplay.textContent =
+          state.angleDeg === null ? "Extension: —" : "Extension: " + formatNumber(state.angleDeg, 1) + "°";
+      }
+    }
+
     function startMeasurement(kind) {
       const state = app[kind];
 
       const modeText = kind === "flexion" ? elements.flexionModeText : elements.extensionModeText;
       const instructionText = kind === "flexion" ? elements.flexionInstructionText : elements.extensionInstructionText;
-      const status = kind === "flexion" ? elements.flexionStatus : elements.extensionStatus;
+      const status = getStatusForKind(kind);
 
       if (!state.loaded) {
         setStatus(status, "Take or upload an image first.", "warn");
@@ -851,40 +1081,72 @@
       state.mode = "measure";
       state.points = [];
       state.angleDeg = null;
+      state.labelSource = "manual_click";
 
       modeText.textContent = "Point 1 of 3";
       instructionText.textContent = landmarkSequence[0].instruction;
       setStatus(status, landmarkSequence[0].instruction);
 
-      if (kind === "flexion") {
-        elements.flexionAngleDisplay.textContent = "Flexion: —";
-      } else {
-        elements.extensionAngleDisplay.textContent = "Extension Deficit: —";
+      updateAngleDisplay(kind);
+      redraw(kind);
+      updateSummary();
+    }
+
+    function finishMeasurement(kind, labelSource = null) {
+      const state = app[kind];
+      state.angleDeg = calculateAngle(kind);
+      state.mode = "idle";
+
+      if (labelSource) {
+        state.labelSource = labelSource;
       }
+
+      const modeText = kind === "flexion" ? elements.flexionModeText : elements.extensionModeText;
+      const instructionText = kind === "flexion" ? elements.flexionInstructionText : elements.extensionInstructionText;
+      const status = getStatusForKind(kind);
+
+      modeText.textContent = "Complete";
+      instructionText.textContent = kind === "flexion"
+        ? "Flexion measurement complete. Drag points to adjust."
+        : "Extension measurement complete. Drag points to adjust.";
+
+      updateAngleDisplay(kind);
+      setStatus(status, capitalize(kind) + " angle measured: " + formatNumber(state.angleDeg, 1) + "°.", "good");
 
       redraw(kind);
       updateSummary();
     }
 
-    function handleCanvasClick(kind, event) {
+    function handlePointPlacement(kind, event) {
       const state = app[kind];
-      const canvas = kind === "flexion" ? elements.flexionCanvas : elements.extensionCanvas;
+      const canvas = getCanvasForKind(kind);
+      const status = getStatusForKind(kind);
       const modeText = kind === "flexion" ? elements.flexionModeText : elements.extensionModeText;
       const instructionText = kind === "flexion" ? elements.flexionInstructionText : elements.extensionInstructionText;
-      const status = kind === "flexion" ? elements.flexionStatus : elements.extensionStatus;
 
       if (!state.loaded) {
         setStatus(status, "Take or upload an image first.", "warn");
         return;
       }
 
-      if (state.mode !== "measure") {
-        setStatus(status, "Click Start Points before selecting landmarks.", "warn");
+      const point = getCanvasPoint(event, canvas);
+      const nearbyIndex = findNearbyPoint(kind, point);
+
+      if (nearbyIndex !== null) {
+        state.draggingPointIndex = nearbyIndex;
+        state.wasDragged = false;
+        canvas.setPointerCapture(event.pointerId);
         return;
       }
 
-      const point = getCanvasClickPoint(event, canvas);
+      if (state.mode !== "measure") {
+        setStatus(status, "Click Start Points, Auto-detect, or drag existing points.", "warn");
+        return;
+      }
+
       const index = state.points.length;
+
+      if (index >= landmarkSequence.length) return;
 
       state.points.push({
         x: point.x,
@@ -898,34 +1160,63 @@
         instructionText.textContent = landmarkSequence[nextIndex].instruction;
         setStatus(status, landmarkSequence[nextIndex].instruction, "good");
       } else {
-        state.mode = "idle";
+        finishMeasurement(kind, "manual_click");
+      }
+
+      redraw(kind);
+    }
+
+    function handlePointDrag(kind, event) {
+      const state = app[kind];
+      const canvas = getCanvasForKind(kind);
+
+      if (state.draggingPointIndex === null) return;
+
+      const point = getCanvasPoint(event, canvas);
+      const idx = state.draggingPointIndex;
+
+      state.points[idx].x = point.x;
+      state.points[idx].y = point.y;
+      state.wasDragged = true;
+      state.labelSource = state.labelSource === "mediapipe_pose_suggestion"
+        ? "mediapipe_pose_suggestion_user_adjusted"
+        : "manual_click_adjusted";
+
+      if (state.points.length === 3) {
         state.angleDeg = calculateAngle(kind);
-
-        modeText.textContent = "Complete";
-        instructionText.textContent = kind === "flexion"
-          ? "Flexion measurement complete."
-          : "Extension measurement complete.";
-
-        if (kind === "flexion") {
-          elements.flexionAngleDisplay.textContent = "Flexion: " + formatNumber(state.angleDeg, 1) + "°";
-          setStatus(status, "Flexion angle measured: " + formatNumber(state.angleDeg, 1) + "°.", "good");
-        } else {
-          const deficit = extensionDeficit();
-          elements.extensionAngleDisplay.textContent = "Extension Deficit: " + formatNumber(deficit, 1) + "°";
-          setStatus(status, "Extension deficit measured: " + formatNumber(deficit, 1) + "°.", "good");
-        }
-
+        updateAngleDisplay(kind);
         updateSummary();
       }
 
       redraw(kind);
     }
 
+    function endPointDrag(kind, event) {
+      const state = app[kind];
+      const canvas = getCanvasForKind(kind);
+
+      if (state.draggingPointIndex !== null) {
+        try {
+          canvas.releasePointerCapture(event.pointerId);
+        } catch {}
+      }
+
+      state.draggingPointIndex = null;
+      state.wasDragged = false;
+
+      if (state.points.length === 3) {
+        state.angleDeg = calculateAngle(kind);
+        updateAngleDisplay(kind);
+        redraw(kind);
+        updateSummary();
+      }
+    }
+
     function undoPoint(kind) {
       const state = app[kind];
       const modeText = kind === "flexion" ? elements.flexionModeText : elements.extensionModeText;
       const instructionText = kind === "flexion" ? elements.flexionInstructionText : elements.extensionInstructionText;
-      const status = kind === "flexion" ? elements.flexionStatus : elements.extensionStatus;
+      const status = getStatusForKind(kind);
 
       if (!state.loaded || state.points.length === 0) {
         setStatus(status, "Nothing to undo.");
@@ -935,18 +1226,14 @@
       state.points.pop();
       state.angleDeg = null;
       state.mode = "measure";
+      state.labelSource = "manual_click";
 
       const nextIndex = state.points.length;
       modeText.textContent = "Point " + (nextIndex + 1) + " of 3";
       instructionText.textContent = landmarkSequence[nextIndex].instruction;
       setStatus(status, "Last point removed. " + landmarkSequence[nextIndex].instruction);
 
-      if (kind === "flexion") {
-        elements.flexionAngleDisplay.textContent = "Flexion: —";
-      } else {
-        elements.extensionAngleDisplay.textContent = "Extension Deficit: —";
-      }
-
+      updateAngleDisplay(kind);
       redraw(kind);
       updateSummary();
     }
@@ -955,20 +1242,21 @@
       const state = app[kind];
       const modeText = kind === "flexion" ? elements.flexionModeText : elements.extensionModeText;
       const instructionText = kind === "flexion" ? elements.flexionInstructionText : elements.extensionInstructionText;
-      const status = kind === "flexion" ? elements.flexionStatus : elements.extensionStatus;
+      const status = getStatusForKind(kind);
 
       state.points = [];
       state.angleDeg = null;
       state.mode = "idle";
+      state.labelSource = "manual_click";
 
       if (kind === "flexion") {
         elements.flexionAngleDisplay.textContent = "Flexion: —";
         modeText.textContent = state.loaded ? "Ready" : "Upload or take flexion image";
-        instructionText.textContent = state.loaded ? "Click Start Flexion Points to begin." : "Choose a lateral flexion photo to begin.";
+        instructionText.textContent = state.loaded ? "Click Start Flexion Points or Auto-detect Flexion." : "Choose a lateral flexion photo to begin.";
       } else {
-        elements.extensionAngleDisplay.textContent = "Extension Deficit: —";
+        elements.extensionAngleDisplay.textContent = "Extension: —";
         modeText.textContent = state.loaded ? "Ready" : "Upload or take extension image";
-        instructionText.textContent = state.loaded ? "Click Start Extension Points to begin." : "Choose a lateral extension photo to begin.";
+        instructionText.textContent = state.loaded ? "Click Start Extension Points or Auto-detect Extension." : "Choose a lateral extension photo to begin.";
       }
 
       redraw(kind);
@@ -1012,13 +1300,154 @@
       `;
     }
 
+    async function initPoseLandmarker(statusElement) {
+      if (poseLandmarker) return poseLandmarker;
+
+      if (poseModelLoading) {
+        setStatus(statusElement, "Pose model is already loading. Try again in a moment.");
+        return null;
+      }
+
+      poseModelLoading = true;
+      setStatus(statusElement, "Loading pose detection model. This may take a few seconds...");
+
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+        );
+
+        poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+            delegate: "GPU"
+          },
+          runningMode: "IMAGE",
+          numPoses: 1
+        });
+
+        setStatus(statusElement, "Pose model loaded.", "good");
+        return poseLandmarker;
+      } catch (error) {
+        try {
+          const vision = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+          );
+
+          poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+              delegate: "CPU"
+            },
+            runningMode: "IMAGE",
+            numPoses: 1
+          });
+
+          setStatus(statusElement, "Pose model loaded using CPU.", "good");
+          return poseLandmarker;
+        } catch (cpuError) {
+          setStatus(statusElement, "Pose model failed to load. You can still use manual clicks.", "warn");
+          return null;
+        }
+      } finally {
+        poseModelLoading = false;
+      }
+    }
+
+    function choosePoseSide(landmarks) {
+      const selected = elements.side.value;
+
+      const left = {
+        shoulder: landmarks[11],
+        elbow: landmarks[13],
+        wrist: landmarks[15]
+      };
+
+      const right = {
+        shoulder: landmarks[12],
+        elbow: landmarks[14],
+        wrist: landmarks[16]
+      };
+
+      if (selected === "Left") return left;
+      if (selected === "Right") return right;
+
+      const leftScore =
+        (left.shoulder?.visibility || 0) +
+        (left.elbow?.visibility || 0) +
+        (left.wrist?.visibility || 0);
+
+      const rightScore =
+        (right.shoulder?.visibility || 0) +
+        (right.elbow?.visibility || 0) +
+        (right.wrist?.visibility || 0);
+
+      return leftScore >= rightScore ? left : right;
+    }
+
+    function normalizedToCanvasPoint(landmark, canvas, key) {
+      return {
+        x: landmark.x * canvas.width,
+        y: landmark.y * canvas.height,
+        landmark: key,
+        visibility: landmark.visibility ?? null
+      };
+    }
+
+    async function autoDetectPose(kind) {
+      const state = app[kind];
+      const canvas = getCanvasForKind(kind);
+      const status = getStatusForKind(kind);
+
+      if (!state.loaded) {
+        setStatus(status, "Load an image first before auto-detecting landmarks.", "warn");
+        return;
+      }
+
+      const model = await initPoseLandmarker(status);
+      if (!model) return;
+
+      try {
+        setStatus(status, "Running pose detection...");
+
+        const result = model.detect(state.img);
+
+        if (!result.landmarks || result.landmarks.length === 0) {
+          setStatus(status, "No body pose detected. Try a less-cropped image or use manual points.", "warn");
+          return;
+        }
+
+        const landmarks = result.landmarks[0];
+        const sideLandmarks = choosePoseSide(landmarks);
+
+        if (!sideLandmarks.shoulder || !sideLandmarks.elbow || !sideLandmarks.wrist) {
+          setStatus(status, "Could not identify shoulder, elbow, and wrist. Use manual points.", "warn");
+          return;
+        }
+
+        state.points = [
+          normalizedToCanvasPoint(sideLandmarks.shoulder, canvas, "humerus_proximal"),
+          normalizedToCanvasPoint(sideLandmarks.elbow, canvas, "elbow_center"),
+          normalizedToCanvasPoint(sideLandmarks.wrist, canvas, "forearm_distal")
+        ];
+
+        state.mode = "idle";
+        state.labelSource = "mediapipe_pose_suggestion";
+        finishMeasurement(kind, "mediapipe_pose_suggestion");
+
+        setStatus(status, "Auto-detected landmarks. Drag points to fine-tune before exporting.", "good");
+      } catch (error) {
+        setStatus(status, "Pose detection failed on this image. Use manual points or try a wider photo.", "warn");
+      }
+    }
+
     function pointsToLandmarkObject(points) {
       const out = {};
 
       points.forEach((p) => {
         out[p.landmark] = {
           x: Number(formatNumber(p.x, 3)),
-          y: Number(formatNumber(p.y, 3))
+          y: Number(formatNumber(p.y, 3)),
+          visibility: p.visibility ?? null
         };
       });
 
@@ -1031,14 +1460,13 @@
         created_at: new Date().toISOString(),
         measurement_date: elements.date.value || "",
         side: elements.side.value,
-        notes: elements.notes.value || "",
-        source: "manual_click"
+        notes: elements.notes.value || ""
       };
     }
 
     function imageLabelRecord(kind) {
       const state = app[kind];
-      const canvas = kind === "flexion" ? elements.flexionCanvas : elements.extensionCanvas;
+      const canvas = getCanvasForKind(kind);
 
       return {
         ...baseMetadata(),
@@ -1049,6 +1477,7 @@
         image_filename: state.filename || "",
         image_width_px: state.loaded ? canvas.width : null,
         image_height_px: state.loaded ? canvas.height : null,
+        label_source: state.labelSource,
         landmarks: pointsToLandmarkObject(state.points),
         measurements: {
           elbow_angle_deg: state.angleDeg,
@@ -1061,7 +1490,7 @@
       return {
         ...baseMetadata(),
         app_name: "Elbow ROM Tracker",
-        app_version: "0.1.0-manual",
+        app_version: "0.2.0-manual-drag-mediapipe",
         flexion: imageLabelRecord("flexion"),
         extension: imageLabelRecord("extension"),
         summary: {
@@ -1070,7 +1499,7 @@
           extension_deficit_deg: extensionDeficit(),
           arc_of_motion_deg: arcOfMotion()
         },
-        future_automation_targets: [
+        automation_targets: [
           "humerus_proximal",
           "elbow_center",
           "forearm_distal"
@@ -1111,6 +1540,8 @@
           "Extension measured angle degrees",
           "Extension deficit degrees",
           "Arc of motion degrees",
+          "Flexion label source",
+          "Extension label source",
           "Notes"
         ],
         [
@@ -1121,6 +1552,8 @@
           app.extension.angleDeg === null ? "" : formatNumber(app.extension.angleDeg, 4),
           extensionDeficit() === null ? "" : formatNumber(extensionDeficit(), 4),
           arcOfMotion() === null ? "" : formatNumber(arcOfMotion(), 4),
+          app.flexion.labelSource,
+          app.extension.labelSource,
           elements.notes.value || ""
         ]
       ];
@@ -1158,26 +1591,26 @@
 
       const cameraInput = kind === "flexion" ? elements.flexionCamera : elements.extensionCamera;
       const uploadInput = kind === "flexion" ? elements.flexionUpload : elements.extensionUpload;
-      const canvas = kind === "flexion" ? elements.flexionCanvas : elements.extensionCanvas;
+      const canvas = getCanvasForKind(kind);
       const empty = kind === "flexion" ? elements.flexionEmpty : elements.extensionEmpty;
       const modeText = kind === "flexion" ? elements.flexionModeText : elements.extensionModeText;
       const instructionText = kind === "flexion" ? elements.flexionInstructionText : elements.extensionInstructionText;
-      const status = kind === "flexion" ? elements.flexionStatus : elements.extensionStatus;
-      const angleDisplay = kind === "flexion" ? elements.flexionAngleDisplay : elements.extensionAngleDisplay;
+      const status = getStatusForKind(kind);
+      const angleDisplay = getAngleDisplayForKind(kind);
 
       cameraInput.addEventListener("change", function (event) {
         loadImage(
           event.target.files[0],
-          "camera",
+          "phone_camera",
           state,
           canvas,
           empty,
           function () { redraw(kind); },
           function () {
             modeText.textContent = "Ready";
-            instructionText.textContent = "Click Start " + capitalize(kind) + " Points to begin.";
-            angleDisplay.textContent = kind === "flexion" ? "Flexion: —" : "Extension Deficit: —";
-            setStatus(status, capitalize(kind) + " image loaded from camera.", "good");
+            instructionText.textContent = "Click Start " + capitalize(kind) + " Points or Auto-detect " + capitalize(kind) + ".";
+            angleDisplay.textContent = kind === "flexion" ? "Flexion: —" : "Extension: —";
+            setStatus(status, capitalize(kind) + " image loaded from phone camera.", "good");
           }
         );
       });
@@ -1192,27 +1625,65 @@
           function () { redraw(kind); },
           function () {
             modeText.textContent = "Ready";
-            instructionText.textContent = "Click Start " + capitalize(kind) + " Points to begin.";
-            angleDisplay.textContent = kind === "flexion" ? "Flexion: —" : "Extension Deficit: —";
+            instructionText.textContent = "Click Start " + capitalize(kind) + " Points or Auto-detect " + capitalize(kind) + ".";
+            angleDisplay.textContent = kind === "flexion" ? "Flexion: —" : "Extension: —";
             setStatus(status, capitalize(kind) + " image loaded from upload.", "good");
           }
         );
       });
     }
 
-    function capitalize(value) {
-      return value.charAt(0).toUpperCase() + value.slice(1);
+    function wireCanvasPointerEvents(kind) {
+      const canvas = getCanvasForKind(kind);
+
+      canvas.addEventListener("pointerdown", function (event) {
+        event.preventDefault();
+        handlePointPlacement(kind, event);
+      });
+
+      canvas.addEventListener("pointermove", function (event) {
+        event.preventDefault();
+        handlePointDrag(kind, event);
+      });
+
+      canvas.addEventListener("pointerup", function (event) {
+        event.preventDefault();
+        endPointDrag(kind, event);
+      });
+
+      canvas.addEventListener("pointercancel", function (event) {
+        event.preventDefault();
+        endPointDrag(kind, event);
+      });
     }
 
     wireImageInputs("flexion");
     wireImageInputs("extension");
+    wireCanvasPointerEvents("flexion");
+    wireCanvasPointerEvents("extension");
 
-    elements.flexionCanvas.addEventListener("click", function (event) {
-      handleCanvasClick("flexion", event);
+    elements.openFlexionCameraBtn.addEventListener("click", function () {
+      openCamera("flexion");
     });
 
-    elements.extensionCanvas.addEventListener("click", function (event) {
-      handleCanvasClick("extension", event);
+    elements.captureFlexionBtn.addEventListener("click", function () {
+      loadCanvasImageFromVideo("flexion");
+    });
+
+    elements.closeFlexionCameraBtn.addEventListener("click", function () {
+      closeCamera("flexion");
+    });
+
+    elements.openExtensionCameraBtn.addEventListener("click", function () {
+      openCamera("extension");
+    });
+
+    elements.captureExtensionBtn.addEventListener("click", function () {
+      loadCanvasImageFromVideo("extension");
+    });
+
+    elements.closeExtensionCameraBtn.addEventListener("click", function () {
+      closeCamera("extension");
     });
 
     elements.startFlexionBtn.addEventListener("click", function () {
@@ -1221,6 +1692,14 @@
 
     elements.startExtensionBtn.addEventListener("click", function () {
       startMeasurement("extension");
+    });
+
+    elements.autoFlexionBtn.addEventListener("click", function () {
+      autoDetectPose("flexion");
+    });
+
+    elements.autoExtensionBtn.addEventListener("click", function () {
+      autoDetectPose("extension");
     });
 
     elements.undoFlexionBtn.addEventListener("click", function () {
